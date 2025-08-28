@@ -37,4 +37,4 @@ jobs:
         bodyFile: CHANGELOG.md
         artifacts: "./menota-helper-*.vsix"
       env:
-        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ secrets.cd_pat }}
