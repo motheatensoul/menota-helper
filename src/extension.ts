@@ -214,10 +214,14 @@ return `${currentValue}1`;
         const position = activeEditor.selection.active;
         const elementTag = `<${elementType} n="${nValue}"/>`;
         
-        await activeEditor.edit(editBuilder => {
+        /* await activeEditor.edit(editBuilder => {
             editBuilder.insert(position, "\n");
             editBuilder.insert(position, elementTag);
-        });
+        }); */
+
+        // Use snippet insertion which automatically maintains indentation
+        const snippet = new vscode.SnippetString(`\n${elementTag}$0`);
+        await activeEditor.insertSnippet(snippet, position);
     }
 }
 
