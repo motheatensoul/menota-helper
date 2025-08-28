@@ -32,9 +32,9 @@ jobs:
       with:
         draft: false
         prerelease: false
-        release_name: nightly
-        tag_name: ${{ github.ref }}
-        body_path: CHANGELOG.md
+        name: nightly
+        tag: nightly
+        bodyFile: CHANGELOG.md
         artifacts: "./menota-helper-*.vsix"
       env:
         GITHUB_TOKEN: ${{ github.token }}
