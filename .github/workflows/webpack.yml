@@ -26,3 +26,14 @@ jobs:
       run: |
         npm install
         npx vsce package
+    - name: Release
+      uses: actions/create-release@v4
+      id: create_release
+      with:
+        draft: false
+        prerelease: false
+        release_name: nightly
+        tag_name: ${{ github.ref }}
+        body_path: CHANGELOG.md
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
