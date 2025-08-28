@@ -21,5 +21,8 @@ Users appreciate release notes as you update your extension.
 
 ### 1.0.0
 
-Initial release of menota-helper.
+- Initial release of menota-helper.
 
+### 1.0.1
+
+- Changes to command names, added automatic line breaks.

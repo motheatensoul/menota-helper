@@ -2,7 +2,7 @@
   "name": "menota-helper",
   "displayName": "Menota Helper",
   "description": "A small extension meant to automate tedious manual inserting of tags.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": "https://github.com/motheatensoul/menota-helper",
   "engines": {
     "vscode": "^1.103.0"
@@ -15,45 +15,45 @@
   "contributes": {
     "commands": [
       {
-        "command": "tei-xml-helper.insertElement",
+        "command": "menota-helper.insertElement",
         "title": "Insert TEI Element",
-        "category": "TEI XML Helper"
+        "category": "Menota Helper"
       },
       {
-        "command": "tei-xml-helper.insertWithPreview",
+        "command": "menota-helper.insertWithPreview",
         "title": "Insert TEI Element with Preview",
-        "category": "TEI XML Helper"
+        "category": "Menota Helper"
       },
       {
-        "command": "tei-xml-helper.insertNextPb",
+        "command": "menota-helper.insertNextPb",
         "title": "Insert Next Page Break",
-        "category": "TEI XML Helper"
+        "category": "Menota Helper"
       },
       {
-        "command": "tei-xml-helper.insertNextLb", 
+        "command": "menota-helper.insertNextLb", 
         "title": "Insert Next Line Break",
-        "category": "TEI XML Helper"
+        "category": "Menota Helper"
       },
       {
-        "command": "tei-xml-helper.insertCustomElement",
+        "command": "menota-helper.insertCustomElement",
         "title": "Insert Custom TEI Element",
-        "category": "TEI XML Helper"
+        "category": "Menota Helper"
       }
     ],
     "keybindings": [
       {
-        "command": "tei-xml-helper.insertWithPreview",
+        "command": "menota-helper.insertWithPreview",
         "key": "ctrl+shift+?",
         "when": "editorLangId == xml"
       },
       {
-        "command": "tei-xml-helper.insertNextPb",
-        "key": "shift+enter",
+        "command": "menota-helper.insertNextPb",
+        "key": "ctrl+enter",
         "when": "editorLangId == xml"
       },
       {
-        "command": "tei-xml-helper.insertNextLb",
-        "key": "control+enter", 
+        "command": "menota-helper.insertNextLb",
+        "key": "shift+enter", 
         "when": "editorLangId == xml"
       }
     ]

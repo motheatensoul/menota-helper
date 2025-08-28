@@ -215,6 +215,7 @@ return `${currentValue}1`;
         const elementTag = `<${elementType} n="${nValue}"/>`;
         
         await activeEditor.edit(editBuilder => {
+            editBuilder.insert(position, "\n");
             editBuilder.insert(position, elementTag);
         });
     }
@@ -227,7 +228,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const teiParser = new TEIParser();
 
     // Command to let user choose which element to insert
-    const insertTEIElement = vscode.commands.registerCommand('tei-xml-helper.insertElement', async () => {
+    const insertTEIElement = vscode.commands.registerCommand('menota-helper.insertElement', async () => {
         try {
             // Show quick pick for element type
             const elementType = await vscode.window.showQuickPick([
@@ -264,7 +265,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Quick command to insert next page break
-    const insertNextPb = vscode.commands.registerCommand('tei-xml-helper.insertNextPb', async () => {
+    const insertNextPb = vscode.commands.registerCommand('menota-helper.insertNextPb', async () => {
         try {
             const elementInfo = await teiParser.parseSpecificElement('pb');
             const nextValue = elementInfo?.nextValue || '1';
@@ -276,7 +277,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Quick command to insert next line break
-    const insertNextLb = vscode.commands.registerCommand('tei-xml-helper.insertNextLb', async () => {
+    const insertNextLb = vscode.commands.registerCommand('menota-helper.insertNextLb', async () => {
         try {
             const elementInfo = await teiParser.parseSpecificElement('lb');
             const nextValue = elementInfo?.nextValue || '1';
@@ -288,7 +289,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Command with user choice and preview
-    const insertWithPreview = vscode.commands.registerCommand('tei-xml-helper.insertWithPreview', async () => {
+    const insertWithPreview = vscode.commands.registerCommand('menota-helper.insertWithPreview', async () => {
         try {
             // Parse both elements to show preview
             const { latestPb, latestLb } = await teiParser.parseCurrentDocument();
@@ -344,7 +345,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Command to show current status
-    const showCurrentStatus = vscode.commands.registerCommand('tei-xml-helper.showStatus', async () => {
+    const showCurrentStatus = vscode.commands.registerCommand('menota-helper.showStatus', async () => {
         try {
             const { latestPb, latestLb } = await teiParser.parseCurrentDocument();
             
@@ -359,7 +360,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Advanced command for custom element types
-    const insertCustomElement = vscode.commands.registerCommand('tei-xml-helper.insertCustomElement', async () => {
+    const insertCustomElement = vscode.commands.registerCommand('menota-helper.insertCustomElement', async () => {
         try {
             // Let user specify custom element name
             const customElementType = await vscode.window.showInputBox({
