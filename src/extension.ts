@@ -4,7 +4,7 @@ import { error } from 'console';
 import { RecordableHistogram } from 'perf_hooks';
 import { CallSiteObject } from 'util';
 import * as vscode from 'vscode';
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 export interface TEIElementInfo {
     element: 'pb' | 'lb';
@@ -143,7 +143,7 @@ export class TEIParser {
 		}
 
 		// Fallback for other patterns
-return `${currentValue}1`;
+        return `${currentValue}1`;
     }
 
     /**
@@ -223,7 +223,248 @@ return `${currentValue}1`;
         const snippet = new vscode.SnippetString(`\n${elementTag}$0`);
         await activeEditor.insertSnippet(snippet, position);
     }
+    /**
+     * Wrap words in <w> tags and punctuation in <pm> tags within <p> elements
+     */
+    public async wrapWordsInParagraphs(): Promise<void> {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            vscode.window.showErrorMessage('No active editor found');
+            return;
+        }
+
+        const document = activeEditor.document;
+        
+        // Check if it's an XML file
+        if (document.languageId !== 'xml') {
+            vscode.window.showErrorMessage('Current document is not an XML file');
+            return;
+        }
+
+        const xmlContent = document.getText();
+
+        try {
+            const wrappedContent = this.processXMLForWordWrapping(xmlContent);
+            
+            // Replace entire document content
+            const fullRange = new vscode.Range(
+                document.positionAt(0),
+                document.positionAt(xmlContent.length)
+            );
+
+            await activeEditor.edit(editBuilder => {
+                editBuilder.replace(fullRange, wrappedContent);
+            });
+
+            vscode.window.showInformationMessage('Words wrapped in <w> and <pm> tags successfully!');
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error processing document: ${error}`);
+        }
+    }
+
+    /**
+     * Process XML content to wrap words and punctuation
+     */
+    private processXMLForWordWrapping(xmlContent: string): string {
+        const xmlDoc = this.xmlParser.parseFromString(xmlContent, 'text/xml');
+        const serializer = new XMLSerializer();
+        
+        // Check for parsing errors
+        const parserError = xmlDoc.getElementsByTagName('parsererror')[0];
+        if (parserError) {
+            throw new Error(`XML parsing error: ${parserError.textContent}`);
+        }
+        
+        // Find the body element
+        const bodyElements = xmlDoc.getElementsByTagName('body');
+        if (bodyElements.length === 0) {
+            throw new Error('No <body> element found in document');
+        }
+        
+        const body = bodyElements[0];
+        
+        // Find all <p> elements within the body
+        const paragraphs = body.getElementsByTagName('p');
+        
+        // Process each paragraph
+        for (let i = 0; i < paragraphs.length; i++) {
+            const paragraph = paragraphs[i];
+            this.wrapWordsInElement(paragraph, xmlDoc);
+        }
+        
+        // Serialize back to string with proper formatting
+        let result = serializer.serializeToString(xmlDoc);
+        
+        // Clean up the formatting to maintain readability
+        result = this.formatXMLOutput(result);
+        
+        return result;
+    }
+
+    /**
+     * Recursively process an element to wrap words and punctuation
+     */
+    private wrapWordsInElement(element: Element, doc: Document): void {
+        const childNodes = Array.from(element.childNodes);
+        
+        for (let i = childNodes.length - 1; i >= 0; i--) {
+            const node = childNodes[i];
+            
+            if (node.nodeType === 3) { // Text node
+                const textContent = node.textContent || '';
+                if (textContent.trim()) {
+                    const wrappedNodes = this.createWrappedNodes(textContent, doc);
+                    
+                    // Replace the text node with wrapped nodes
+                    for (let j = wrappedNodes.length - 1; j >= 0; j--) {
+                        element.insertBefore(wrappedNodes[j], node.nextSibling);
+                    }
+                    element.removeChild(node);
+                }
+            } else if (node.nodeType === 1) { // Element node
+                const elementNode = node as Element;
+                const tagName = elementNode.tagName.toLowerCase();
+                
+                // Skip self-closing tags and already wrapped elements
+                if (!this.isSelfClosingOrSkippableTag(tagName)) {
+                    // Check if this element contains word content that should be wrapped
+                    if (this.isInlineTextElement(tagName)) {
+                        // For inline elements like <unclear>, <add>, etc., wrap the whole element in <w>
+                        const hasWordContent = this.containsWordContent(elementNode);
+                        if (hasWordContent && !this.isAlreadyWrapped(elementNode)) {
+                            this.wrapElementInW(elementNode, doc);
+                        }
+                    } else {
+                        // Recursively process child elements
+                        this.wrapWordsInElement(elementNode, doc);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Create wrapped word and punctuation nodes from text
+     */
+    private createWrappedNodes(text: string, doc: Document): Node[] {
+        const nodes: Node[] = [];
+        
+        // Split text preserving whitespace and handling word boundaries
+        const tokens = this.tokenizeText(text);
+        
+        for (const token of tokens) {
+            if (token.type === 'whitespace') {
+                nodes.push(doc.createTextNode(token.value));
+            } else if (token.type === 'word') {
+                const wElement = doc.createElement('w');
+                wElement.textContent = token.value;
+                nodes.push(wElement);
+            } else if (token.type === 'punctuation') {
+                const pmElement = doc.createElement('pm');
+                pmElement.textContent = token.value;
+                nodes.push(pmElement);
+            }
+        }
+        
+        return nodes;
+    }
+
+    /**
+     * Tokenize text into words, punctuation, and whitespace
+     */
+    private tokenizeText(text: string): Array<{type: 'word' | 'punctuation' | 'whitespace', value: string}> {
+        const tokens: Array<{type: 'word' | 'punctuation' | 'whitespace', value: string}> = [];
+        
+        // Regex to match words, punctuation, and whitespace
+        const regex = /(\s+)|(\w+)|([^\w\s]+)/g;
+        let match;
+        
+        while ((match = regex.exec(text)) !== null) {
+            if (match[1]) {
+                // Whitespace
+                tokens.push({type: 'whitespace', value: match[1]});
+            } else if (match[2]) {
+                // Word
+                tokens.push({type: 'word', value: match[2]});
+            } else if (match[3]) {
+                // Punctuation
+                tokens.push({type: 'punctuation', value: match[3]});
+            }
+        }
+        
+        return tokens;
+    }
+
+    /**
+     * Check if element contains word content
+     */
+    private containsWordContent(element: Element): boolean {
+        const textContent = element.textContent || '';
+        return /\w/.test(textContent);
+    }
+
+    /**
+     * Check if element is already wrapped in <w> or <pm>
+     */
+    private isAlreadyWrapped(element: Element): boolean {
+        const parent = element.parentNode as Element;
+        if (!parent) return false;
+        
+        const parentTag = parent.tagName.toLowerCase();
+        return parentTag === 'w' || parentTag === 'pm';
+    }
+
+    /**
+     * Wrap an entire element in a <w> tag
+     */
+    private wrapElementInW(element: Element, doc: Document): void {
+        const wElement = doc.createElement('w');
+        const parent = element.parentNode;
+        
+        if (parent) {
+            parent.insertBefore(wElement, element);
+            parent.removeChild(element);
+            wElement.appendChild(element);
+        }
+    }
+
+    /**
+     * Check if tag should be skipped or is self-closing
+     */
+    private isSelfClosingOrSkippableTag(tagName: string): boolean {
+        const skipTags = ['pb', 'lb', 'br', 'hr', 'img', 'input', 'meta', 'link', 'w', 'pm'];
+        return skipTags.includes(tagName.toLowerCase());
+    }
+
+    /**
+     * Check if element is an inline text element that should be wrapped as a unit
+     */
+    private isInlineTextElement(tagName: string): boolean {
+        const inlineTextTags = ['unclear', 'add', 'del', 'supplied', 'abbr', 'expan', 'hi', 'emph', 'foreign'];
+        return inlineTextTags.includes(tagName.toLowerCase());
+    }
+
+    /**
+     * Format XML output to maintain readability
+     */
+    private formatXMLOutput(xmlString: string): string {
+        // Basic formatting to prevent everything from being on one line
+        let formatted = xmlString;
+        
+        // Add newlines after closing tags that should be on their own line
+        formatted = formatted.replace(/(<\/(?:p|div|body|text|TEI)>)/g, '$1\n');
+        
+        // Add newlines before opening tags that should start new lines
+        formatted = formatted.replace(/(<(?:p|div|body|text|TEI)[^>]*>)/g, '\n$1');
+        
+        // Clean up multiple newlines
+        formatted = formatted.replace(/\n\s*\n/g, '\n');
+        
+        return formatted.trim();
+    }
 }
+
+
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -403,13 +644,22 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    const wrapWordsCommand = vscode.commands.registerCommand('menota-helper.wrapWords', async () => {
+        try {
+            await teiParser.wrapWordsInParagraphs();
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error wrapping words: ${error}`);
+        }
+    });
+
     context.subscriptions.push(
         insertTEIElement,
         insertNextPb,
         insertNextLb,
         insertWithPreview,
         showCurrentStatus,
-        insertCustomElement
+        insertCustomElement,
+        wrapWordsCommand
     );
 }
 
