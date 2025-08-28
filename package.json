@@ -42,7 +42,7 @@
       {
         "command": "menota-helper.wrapWords",
         "title": "Wrap Words in <w> and Punctuation in <pm> Tags",
-        "category": "MENOTA Helper"
+        "category": "Menota Helper"
       }
     ],
     "keybindings": [

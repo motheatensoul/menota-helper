@@ -223,8 +223,9 @@ export class TEIParser {
         const snippet = new vscode.SnippetString(`\n${elementTag}$0`);
         await activeEditor.insertSnippet(snippet, position);
     }
+
     /**
-     * Wrap words in <w> tags and punctuation in <pm> tags within <p> elements
+     * Wrap words in <w> tags and punctuation in <pc> tags within <p> elements
      */
     public async wrapWordsInParagraphs(): Promise<void> {
         const activeEditor = vscode.window.activeTextEditor;
@@ -256,7 +257,7 @@ export class TEIParser {
                 editBuilder.replace(fullRange, wrappedContent);
             });
 
-            vscode.window.showInformationMessage('Words wrapped in <w> and <pm> tags successfully!');
+            vscode.window.showInformationMessage('Words wrapped in <w> and <pc> tags successfully!');
         } catch (error) {
             vscode.window.showErrorMessage(`Error processing document: ${error}`);
         }
@@ -267,7 +268,6 @@ export class TEIParser {
      */
     private processXMLForWordWrapping(xmlContent: string): string {
         const xmlDoc = this.xmlParser.parseFromString(xmlContent, 'text/xml');
-        const serializer = new XMLSerializer();
         
         // Check for parsing errors
         const parserError = xmlDoc.getElementsByTagName('parsererror')[0];
@@ -292,13 +292,27 @@ export class TEIParser {
             this.wrapWordsInElement(paragraph, xmlDoc);
         }
         
-        // Serialize back to string with proper formatting
+        // Serialize back to string
+        const serializer = new XMLSerializer();
         let result = serializer.serializeToString(xmlDoc);
         
-        // Clean up the formatting to maintain readability
-        result = this.formatXMLOutput(result);
+        // Fix the XML entity escaping issue by restoring proper entities
+        result = this.restoreXMLEntities(result);
         
         return result;
+    }
+
+    /**
+     * Restore XML entities that were escaped during serialization
+     */
+    private restoreXMLEntities(xmlString: string): string {
+        // Restore named entities that were escaped (e.g., &amp;aelig; back to &aelig;)
+        let restored = xmlString.replace(/&amp;([a-zA-Z][a-zA-Z0-9]*;)/g, '&$1');
+        
+        // Restore numeric entities that were escaped (e.g., &amp;#123; back to &#123;)
+        restored = restored.replace(/&amp;(#(?:x[0-9a-fA-F]+|\d+);)/g, '&$1');
+        
+        return restored;
     }
 
     /**
@@ -360,9 +374,9 @@ export class TEIParser {
                 wElement.textContent = token.value;
                 nodes.push(wElement);
             } else if (token.type === 'punctuation') {
-                const pmElement = doc.createElement('pm');
-                pmElement.textContent = token.value;
-                nodes.push(pmElement);
+                const pcElement = doc.createElement('pc');
+                pcElement.textContent = token.value;
+                nodes.push(pcElement);
             }
         }
         
@@ -375,20 +389,82 @@ export class TEIParser {
     private tokenizeText(text: string): Array<{type: 'word' | 'punctuation' | 'whitespace', value: string}> {
         const tokens: Array<{type: 'word' | 'punctuation' | 'whitespace', value: string}> = [];
         
-        // Regex to match words, punctuation, and whitespace
-        const regex = /(\s+)|(\w+)|([^\w\s]+)/g;
-        let match;
+        // Define what constitutes a word character (including Unicode letters, numbers, parentheses, and XML entities)
+        // Using Unicode property escapes to match all letters from any language
+        const wordCharPattern = /[\p{Letter}\p{Mark}\p{Decimal_Number}_()]/u;
+        const xmlEntityPattern = /&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);/;
         
-        while ((match = regex.exec(text)) !== null) {
-            if (match[1]) {
-                // Whitespace
-                tokens.push({type: 'whitespace', value: match[1]});
-            } else if (match[2]) {
-                // Word
-                tokens.push({type: 'word', value: match[2]});
-            } else if (match[3]) {
-                // Punctuation
-                tokens.push({type: 'punctuation', value: match[3]});
+        let i = 0;
+        while (i < text.length) {
+            // Check for whitespace
+            if (/\s/.test(text[i])) {
+                let whitespace = '';
+                while (i < text.length && /\s/.test(text[i])) {
+                    whitespace += text[i];
+                    i++;
+                }
+                tokens.push({type: 'whitespace', value: whitespace});
+                continue;
+            }
+            
+            // Check for XML entity at current position
+            const entityMatch = text.substring(i).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/);
+            if (entityMatch) {
+                // Found XML entity - check if it's part of a word or standalone
+                let word = entityMatch[1];
+                let j = i + entityMatch[1].length;
+                
+                // Continue collecting word characters or entities
+                while (j < text.length) {
+                    const nextEntityMatch = text.substring(j).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/);
+                    if (nextEntityMatch) {
+                        word += nextEntityMatch[1];
+                        j += nextEntityMatch[1].length;
+                    } else if (wordCharPattern.test(text[j])) {
+                        word += text[j];
+                        j++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                tokens.push({type: 'word', value: word});
+                i = j;
+                continue;
+            }
+            
+            // Check for regular word character
+            if (wordCharPattern.test(text[i])) {
+                let word = '';
+                while (i < text.length) {
+                    // Check for XML entity
+                    const entityMatch = text.substring(i).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/);
+                    if (entityMatch) {
+                        word += entityMatch[1];
+                        i += entityMatch[1].length;
+                    } else if (wordCharPattern.test(text[i])) {
+                        word += text[i];
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push({type: 'word', value: word});
+                continue;
+            }
+            
+            // Everything else is punctuation
+            let punctuation = '';
+            while (i < text.length && 
+                !(/\s/.test(text[i])) && 
+                !(wordCharPattern.test(text[i])) &&
+                !(text.substring(i).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/))) {
+                punctuation += text[i];
+                i++;
+            }
+            
+            if (punctuation) {
+                tokens.push({type: 'punctuation', value: punctuation});
             }
         }
         
@@ -400,18 +476,19 @@ export class TEIParser {
      */
     private containsWordContent(element: Element): boolean {
         const textContent = element.textContent || '';
-        return /\w/.test(textContent);
+        // Check for Unicode letters, numbers, parentheses, or XML entities
+        return /[\p{Letter}\p{Mark}\p{Decimal_Number}_()]|&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);/u.test(textContent);
     }
 
     /**
-     * Check if element is already wrapped in <w> or <pm>
+     * Check if element is already wrapped in <w> or <pc>
      */
     private isAlreadyWrapped(element: Element): boolean {
         const parent = element.parentNode as Element;
         if (!parent) return false;
         
         const parentTag = parent.tagName.toLowerCase();
-        return parentTag === 'w' || parentTag === 'pm';
+        return parentTag === 'w' || parentTag === 'pc';
     }
 
     /**
@@ -432,7 +509,7 @@ export class TEIParser {
      * Check if tag should be skipped or is self-closing
      */
     private isSelfClosingOrSkippableTag(tagName: string): boolean {
-        const skipTags = ['pb', 'lb', 'br', 'hr', 'img', 'input', 'meta', 'link', 'w', 'pm'];
+        const skipTags = ['pb', 'lb', 'br', 'hr', 'img', 'input', 'meta', 'link', 'w', 'pc'];
         return skipTags.includes(tagName.toLowerCase());
     }
 
@@ -448,19 +525,9 @@ export class TEIParser {
      * Format XML output to maintain readability
      */
     private formatXMLOutput(xmlString: string): string {
-        // Basic formatting to prevent everything from being on one line
-        let formatted = xmlString;
-        
-        // Add newlines after closing tags that should be on their own line
-        formatted = formatted.replace(/(<\/(?:p|div|body|text|TEI)>)/g, '$1\n');
-        
-        // Add newlines before opening tags that should start new lines
-        formatted = formatted.replace(/(<(?:p|div|body|text|TEI)[^>]*>)/g, '\n$1');
-        
-        // Clean up multiple newlines
-        formatted = formatted.replace(/\n\s*\n/g, '\n');
-        
-        return formatted.trim();
+        // Return the XML string without adding any line breaks
+        // to preserve the original document structure
+        return xmlString;
     }
 }
 
@@ -663,14 +730,6 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
-async function findCurrentPage() {
-	let editor = vscode.window.activeTextEditor;
-	if(editor === undefined) {
-		console.log("No editor found.");
-		error('error', 1);
-	}
-	
-}
 // This method is called when your extension is deactivated
 export function deactivate() {
 
