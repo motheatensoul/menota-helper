@@ -12,7 +12,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x, 22.x]
+        node-version: [22.x]
 
     steps:
     - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
         npm install
         npx vsce package
     - name: Release
-      uses: actions/create-release@v4
+      uses: ncipollo/release-action@v1
       id: create_release
       with:
         draft: false
@@ -35,5 +35,6 @@ jobs:
         release_name: nightly
         tag_name: ${{ github.ref }}
         body_path: CHANGELOG.md
+        artifacts: "./menota-helper-*.vsix"
       env:
         GITHUB_TOKEN: ${{ github.token }}
