@@ -36,5 +36,4 @@ jobs:
         tag: nightly
         bodyFile: CHANGELOG.md
         artifacts: "./menota-helper-*.vsix"
-      env:
-        GITHUB_TOKEN: ${{ secrets.cd_pat }}
+        token: ${{ secrets.cd_pat }}
