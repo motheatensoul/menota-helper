@@ -93,6 +93,73 @@ export class TEIParser {
         return elements[elements.length - 1] as Element;
     }
 
+    private findLatestLbInCurrentContext(xmlDoc: Document): Element | null {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            return null;
+        }
+
+        // Get cursor position to determine which paragraph we're in
+        const cursorPosition = activeEditor.selection.active;
+        const documentText = activeEditor.document.getText();
+        const cursorOffset = activeEditor.document.offsetAt(cursorPosition);
+        
+        // Find all <p> elements and determine which one contains the cursor
+        const bodyElements = xmlDoc.getElementsByTagName('body');
+        if (bodyElements.length === 0) {
+            return null;
+        }
+        
+        const paragraphs = bodyElements[0].getElementsByTagName('p');
+        let currentParagraph: Element | null = null;
+        
+        // Find the paragraph that contains or comes before the cursor position
+        for (let i = 0; i < paragraphs.length; i++) {
+            const paragraph = paragraphs[i];
+            const serializer = new XMLSerializer();
+            const paragraphText = serializer.serializeToString(paragraph);
+            const paragraphIndex = documentText.indexOf(paragraphText);
+            
+            if (paragraphIndex >= 0 && paragraphIndex <= cursorOffset) {
+                currentParagraph = paragraph;
+            }
+        }
+        
+        // If we couldn't determine current paragraph, use the last one
+        if (!currentParagraph && paragraphs.length > 0) {
+            currentParagraph = paragraphs[paragraphs.length - 1];
+        }
+        
+        if (!currentParagraph) {
+            return null;
+        }
+        
+        // Find lb elements within this specific paragraph
+        const lbElements = currentParagraph.getElementsByTagName('lb');
+        
+        if (lbElements.length === 0) {
+            return null;
+        }
+        
+        // Return the last lb element found in this paragraph
+        return lbElements[lbElements.length - 1] as Element;
+    }
+
+    /**
+     * Check if an element is inside a <note> tag (editorial comments)
+     */
+    private isInsideNoteElement(element: Node): boolean {
+        let current = element.parentNode;
+        while (current && current.nodeType === 1) {
+            const currentElement = current as Element;
+            if (currentElement.tagName.toLowerCase() === 'note') {
+                return true;
+            }
+            current = current.parentNode;
+        }
+        return false;
+    }
+
     /**
      * Create element info with next value calculation
      */
@@ -317,12 +384,23 @@ export class TEIParser {
 
     /**
      * Recursively process an element to wrap words and punctuation
+     * Skip content within <note> tags
      */
     private wrapWordsInElement(element: Element, doc: Document): void {
+        // Skip processing if this element is inside a <note>
+        if (this.isInsideNoteElement(element)) {
+            return;
+        }
+
         const childNodes = Array.from(element.childNodes);
         
         for (let i = childNodes.length - 1; i >= 0; i--) {
             const node = childNodes[i];
+            
+            // Skip processing if this node is inside a <note>
+            if (this.isInsideNoteElement(node)) {
+                continue;
+            }
             
             if (node.nodeType === 3) { // Text node
                 const textContent = node.textContent || '';
@@ -338,6 +416,11 @@ export class TEIParser {
             } else if (node.nodeType === 1) { // Element node
                 const elementNode = node as Element;
                 const tagName = elementNode.tagName.toLowerCase();
+                
+                // Skip <note> elements entirely
+                if (tagName === 'note') {
+                    continue;
+                }
                 
                 // Skip self-closing tags and already wrapped elements
                 if (!this.isSelfClosingOrSkippableTag(tagName)) {
@@ -357,6 +440,7 @@ export class TEIParser {
         }
     }
 
+    
     /**
      * Create wrapped word and punctuation nodes from text
      */
@@ -509,9 +593,10 @@ export class TEIParser {
      * Check if tag should be skipped or is self-closing
      */
     private isSelfClosingOrSkippableTag(tagName: string): boolean {
-        const skipTags = ['pb', 'lb', 'br', 'hr', 'img', 'input', 'meta', 'link', 'w', 'pc'];
+        const skipTags = ['pb', 'lb', 'br', 'hr', 'img', 'input', 'meta', 'link', 'w', 'pc', 'note'];
         return skipTags.includes(tagName.toLowerCase());
     }
+
 
     /**
      * Check if element is an inline text element that should be wrapped as a unit
