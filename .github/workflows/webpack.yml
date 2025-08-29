@@ -30,6 +30,7 @@ jobs:
       uses: ncipollo/release-action@v1
       id: create_release
       with:
+        allowUpdates: true
         draft: false
         prerelease: false
         name: nightly
