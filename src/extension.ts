@@ -13,6 +13,7 @@ export interface TEIElementInfo {
 }
 
 export class TEIParser {
+    public TEIDebug = vscode.window.createOutputChannel('TEI Debug');
     private xmlParser: DOMParser;
 
     constructor() {
@@ -42,7 +43,7 @@ export class TEIParser {
             const xmlDoc = this.xmlParser.parseFromString(xmlContent, 'text/xml');
             
             const latestPb = this.findLatestElement(xmlDoc, 'pb');
-            const latestLb = this.findLatestElement(xmlDoc, 'lb');
+            const latestLb = this.findLatestLbInCurrentContext(xmlDoc);
             
             return {
                 latestPb: latestPb ? this.createElementInfo('pb', latestPb) : undefined,
@@ -71,9 +72,15 @@ export class TEIParser {
         
         try {
             const xmlDoc = this.xmlParser.parseFromString(xmlContent, 'text/xml');
-            const latestElement = this.findLatestElement(xmlDoc, elementType);
-            
-            return latestElement ? this.createElementInfo(elementType, latestElement) : undefined;
+            let output;
+            if(elementType === 'pb') {
+                const latestElement = this.findLatestElement(xmlDoc, elementType);
+                output = latestElement ? this.createElementInfo(elementType, latestElement) : undefined;
+            } else {
+                const latestElement = this.findLatestLbInCurrentContext(xmlDoc);
+                output = latestElement ? this.createElementInfo(elementType, latestElement) : undefined;
+            }
+            return output;
         } catch (error) {
             throw new Error(`Failed to parse XML: ${error}`);
         }
@@ -165,8 +172,9 @@ export class TEIParser {
      */
     private createElementInfo(elementType: 'pb' | 'lb', element: Element): TEIElementInfo {
         const nValue = element.getAttribute('n') || '';
+        this.TEIDebug.appendLine(`n is ${nValue}`);
         const nextValue = this.calculateNextValue(nValue);
-        
+        this.TEIDebug.appendLine(`next n is ${nextValue}`);
         return {
             element: elementType,
             nValue,
@@ -492,7 +500,7 @@ export class TEIParser {
             }
             
             // Check for XML entity at current position
-            const entityMatch = text.substring(i).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/);
+            const entityMatch = text.substring(i).match(xmlEntityPattern);
             if (entityMatch) {
                 // Found XML entity - check if it's part of a word or standalone
                 let word = entityMatch[1];
@@ -500,7 +508,7 @@ export class TEIParser {
                 
                 // Continue collecting word characters or entities
                 while (j < text.length) {
-                    const nextEntityMatch = text.substring(j).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/);
+                    const nextEntityMatch = text.substring(j).match(xmlEntityPattern);
                     if (nextEntityMatch) {
                         word += nextEntityMatch[1];
                         j += nextEntityMatch[1].length;
@@ -522,7 +530,7 @@ export class TEIParser {
                 let word = '';
                 while (i < text.length) {
                     // Check for XML entity
-                    const entityMatch = text.substring(i).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/);
+                    const entityMatch = text.substring(i).match(xmlEntityPattern);
                     if (entityMatch) {
                         word += entityMatch[1];
                         i += entityMatch[1].length;
@@ -542,7 +550,7 @@ export class TEIParser {
             while (i < text.length && 
                 !(/\s/.test(text[i])) && 
                 !(wordCharPattern.test(text[i])) &&
-                !(text.substring(i).match(/^(&[a-zA-Z][a-zA-Z0-9]*;|&#(?:x[0-9a-fA-F]+|\d+);)/))) {
+                !(text.substring(i).match(xmlEntityPattern))) {
                 punctuation += text[i];
                 i++;
             }
@@ -569,7 +577,7 @@ export class TEIParser {
      */
     private isAlreadyWrapped(element: Element): boolean {
         const parent = element.parentNode as Element;
-        if (!parent) return false;
+        if (!parent) { return false; }
         
         const parentTag = parent.tagName.toLowerCase();
         return parentTag === 'w' || parentTag === 'pc';
@@ -606,14 +614,6 @@ export class TEIParser {
         return inlineTextTags.includes(tagName.toLowerCase());
     }
 
-    /**
-     * Format XML output to maintain readability
-     */
-    private formatXMLOutput(xmlString: string): string {
-        // Return the XML string without adding any line breaks
-        // to preserve the original document structure
-        return xmlString;
-    }
 }
 
 
